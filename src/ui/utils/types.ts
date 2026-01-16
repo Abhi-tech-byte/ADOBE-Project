@@ -8,11 +8,29 @@ export interface BrandColors {
     text: string;
 }
 
+export interface ContactInfo {
+    email?: string;
+    phone?: string;
+    website?: string;
+    address?: string;
+}
+
+export interface SocialLinks {
+    instagram?: string;
+    twitter?: string;
+    linkedin?: string;
+    facebook?: string;
+    youtube?: string;
+    tiktok?: string;
+}
+
 export interface BrandKit {
     id: string;
     name: string;
     colors: BrandColors;
     logoUrl?: string;
+    contactInfo?: ContactInfo;
+    socialLinks?: SocialLinks;
 }
 
 export interface SocialTemplate {
@@ -28,6 +46,7 @@ export interface SavedTemplate {
     id: string;
     name: string;
     brandKitId: string;
+    platform: string;
     createdAt: string;
 }
 
@@ -37,4 +56,18 @@ export interface RGBAColor {
     green: number;
     blue: number;
     alpha: number;
+}
+
+// Compliance check result
+export interface ComplianceIssue {
+    type: 'color' | 'logo' | 'text' | 'size';
+    severity: 'error' | 'warning';
+    message: string;
+    suggestion?: string;
+}
+
+export interface ComplianceResult {
+    isCompliant: boolean;
+    score: number; // 0-100
+    issues: ComplianceIssue[];
 }
