@@ -116,8 +116,8 @@ export const SOCIAL_TEMPLATES: SocialTemplate[] = [
     },
     {
         id: "twitter",
-        platform: "Twitter/X",
-        name: "Twitter Post",
+        platform: "X",
+        name: "X Post",
         width: 1200,
         height: 675,
         icon: "🐦"
