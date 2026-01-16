@@ -6,7 +6,7 @@ import "@spectrum-web-components/theme/express/theme-light.js";
 
 import { Theme } from "@swc-react/theme";
 import React, { useState, useEffect } from "react";
-import { BrandKit, SocialTemplate, SavedTemplate, ComplianceResult, ComplianceIssue } from "../utils/types";
+import { BrandKit, SocialTemplate, SavedTemplate, ComplianceResult, ComplianceIssue, BrandAsset, SavedImageRef } from "../utils/types";
 import { SOCIAL_TEMPLATES } from "../utils/brandData";
 import {
     getAllBrandKits,
@@ -38,6 +38,10 @@ interface DocumentSandboxApi {
     getSelectionInfo(): any[];
     getCurrentPageDimensions(): { width: number; height: number };
     checkBrandCompliance(brandColors: RGBAColor[]): any[];
+    createContactText(text: string, color: RGBAColor, positionY: number): any;
+    createFooterText(contactInfo: { email?: string; phone?: string; website?: string }, textColor: RGBAColor): any;
+    captureCanvasElements(): { pageWidth: number; pageHeight: number; elements: any[]; imageCount?: number };
+    recreateCanvasElements(data: { pageWidth: number; pageHeight: number; elements: any[] }): any;
 }
 
 type TabType = "brand" | "social" | "templates" | "compliance";
@@ -58,6 +62,9 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
     const [lastCreatedPlatform, setLastCreatedPlatform] = useState<string | null>(null);
     const [complianceResult, setComplianceResult] = useState<ComplianceResult | null>(null);
     const [isChecking, setIsChecking] = useState(false);
+    const [showSaveModal, setShowSaveModal] = useState(false);
+    const [templateNameInput, setTemplateNameInput] = useState("");
+    const [addedImages, setAddedImages] = useState<SavedImageRef[]>([]);
 
     // Load data on mount
     useEffect(() => {
@@ -108,6 +115,9 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
     const handleCreatePost = async (template: SocialTemplate) => {
         if (!activeBrand) return;
 
+        // Reset tracked images for new design
+        setAddedImages([]);
+
         const params = {
             width: template.width,
             height: template.height,
@@ -121,7 +131,7 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
         setLastCreatedPlatform(template.name);
         showStatus("success", `Created ${template.name} (${template.width}×${template.height})!`);
 
-        // Add logo if available
+        // Add logo if available and track it
         if (activeBrand.logoUrl) {
             try {
                 const response = await fetch(activeBrand.logoUrl);
@@ -129,6 +139,17 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
                 await addOnUISdk.app.document.addImage(logoBlob, {
                     title: `${activeBrand.name} Logo`
                 });
+                
+                // Track the logo for saving
+                setAddedImages(prev => [...prev, {
+                    url: activeBrand.logoUrl!,
+                    name: `${activeBrand.name} Logo`,
+                    x: 20,
+                    y: 20,
+                    width: 100,
+                    height: 100
+                }]);
+                
                 showStatus("success", `Created ${template.name} with ${activeBrand.name} logo!`);
             } catch (e) {
                 console.log("Could not load logo, continuing without it");
@@ -136,26 +157,219 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
         }
     };
 
-    // Manual save template (only when user clicks Save)
-    const handleSaveTemplate = () => {
-        if (!activeBrand || !lastCreatedPlatform) {
-            showStatus("error", "Create a post first, then save it!");
+    // Open save template modal
+    const handleOpenSaveModal = () => {
+        if (!activeBrand) {
+            showStatus("error", "Select a brand kit first!");
+            return;
+        }
+        // Generate a default name based on current state
+        const defaultName = lastCreatedPlatform 
+            ? `${activeBrand.name} - ${lastCreatedPlatform}`
+            : `${activeBrand.name} - Custom Design`;
+        setTemplateNameInput(defaultName);
+        setShowSaveModal(true);
+    };
+
+    // Actually save the template with editable canvas elements
+    const handleSaveTemplate = async () => {
+        if (!activeBrand || !templateNameInput.trim()) {
+            showStatus("error", "Please enter a template name!");
             return;
         }
 
-        const templateName = prompt("Enter a name for this template:", `${activeBrand.name} - ${lastCreatedPlatform}`);
-        if (!templateName) return;
+        try {
+            showStatus("info", "Capturing canvas elements...");
+            
+            // Capture all elements on the current canvas
+            const canvasData = await sandboxProxy.captureCanvasElements();
+            
+            const newTemplate: SavedTemplate = {
+                id: `template_${Date.now()}`,
+                name: templateNameInput.trim(),
+                brandKitId: activeBrand.id,
+                platform: lastCreatedPlatform || "Custom Design",
+                createdAt: new Date().toISOString(),
+                // Store the actual canvas data
+                pageWidth: canvasData.pageWidth,
+                pageHeight: canvasData.pageHeight,
+                elements: canvasData.elements,
+                // Store tracked images for reloading
+                images: addedImages.length > 0 ? [...addedImages] : undefined,
+                // Store brand logo URL
+                logoUrl: activeBrand.logoUrl
+            };
+            
+            saveTemplate(newTemplate);
+            
+            // Refresh the templates list
+            const updatedTemplates = getSavedTemplates();
+            setSavedTemplates(updatedTemplates);
+            
+            // Close modal and show success
+            setShowSaveModal(false);
+            setTemplateNameInput("");
+            
+            // Build success message
+            let msg = `Saved "${newTemplate.name}" with ${canvasData.elements.length} elements`;
+            if (addedImages.length > 0) {
+                msg += ` and ${addedImages.length} images`;
+            }
+            msg += "!";
+            
+            showStatus("success", msg);
+            
+            // Auto-switch to Saved tab to show it worked
+            setActiveTab("templates");
+        } catch (error) {
+            console.error("Error saving template:", error);
+            showStatus("error", "Failed to save template");
+        }
+    };
 
-        const newTemplate: SavedTemplate = {
-            id: `${Date.now()}`,
-            name: templateName,
-            brandKitId: activeBrand.id,
-            platform: lastCreatedPlatform,
-            createdAt: new Date().toISOString()
-        };
-        saveTemplate(newTemplate);
-        setSavedTemplates(getSavedTemplates());
-        showStatus("success", `Saved "${templateName}" to templates!`);
+    // Cancel save modal
+    const handleCancelSave = () => {
+        setShowSaveModal(false);
+        setTemplateNameInput("");
+    };
+
+    // Helper to add delay for context sync
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Helper to load images onto canvas
+    const loadImagesToCanvas = async (images: SavedImageRef[], logoUrl?: string) => {
+        let loadedImages = 0;
+        const newTrackedImages: SavedImageRef[] = [];
+        
+        // Load saved images
+        if (images && images.length > 0) {
+            for (const imgRef of images) {
+                try {
+                    const response = await fetch(imgRef.url);
+                    const blob = await response.blob();
+                    await addOnUISdk.app.document.addImage(blob, {
+                        title: imgRef.name
+                    });
+                    loadedImages++;
+                    newTrackedImages.push(imgRef);
+                    // Small delay between images to ensure proper context
+                    await delay(100);
+                } catch (e) {
+                    console.log(`Could not load image: ${imgRef.name}`, e);
+                }
+            }
+        }
+        
+        // Load logo if no other images and logo URL exists
+        if (loadedImages === 0 && logoUrl) {
+            try {
+                const response = await fetch(logoUrl);
+                const blob = await response.blob();
+                await addOnUISdk.app.document.addImage(blob, {
+                    title: "Brand Logo"
+                });
+                loadedImages++;
+                newTrackedImages.push({
+                    url: logoUrl,
+                    name: "Brand Logo",
+                    x: 20, y: 20, width: 100, height: 100
+                });
+            } catch (e) {
+                console.log("Could not load logo", e);
+            }
+        }
+        
+        return { loadedImages, newTrackedImages };
+    };
+
+    // Load a saved template onto canvas - recreates all saved elements AND images
+    const handleLoadTemplate = async (savedTemplate: SavedTemplate) => {
+        // Reset tracked images
+        setAddedImages([]);
+        
+        // Check if template has saved canvas data
+        if (savedTemplate.elements && savedTemplate.elements.length > 0 && savedTemplate.pageWidth && savedTemplate.pageHeight) {
+            // Recreate from saved canvas data
+            showStatus("info", "Loading template elements...");
+            
+            try {
+                const result = await sandboxProxy.recreateCanvasElements({
+                    pageWidth: savedTemplate.pageWidth,
+                    pageHeight: savedTemplate.pageHeight,
+                    elements: savedTemplate.elements
+                });
+                
+                setLastCreatedPlatform(savedTemplate.platform);
+                
+                // Wait for the new page to be ready before adding images
+                await delay(300);
+                
+                // Load images
+                showStatus("info", "Loading images...");
+                const { loadedImages, newTrackedImages } = await loadImagesToCanvas(
+                    savedTemplate.images || [],
+                    savedTemplate.logoUrl
+                );
+                
+                setAddedImages(newTrackedImages);
+                
+                const msg = loadedImages > 0
+                    ? `Loaded "${savedTemplate.name}" with ${result.recreatedCount} elements and ${loadedImages} images!`
+                    : `Loaded "${savedTemplate.name}" with ${result.recreatedCount} elements!`;
+                showStatus("success", msg);
+                
+            } catch (error) {
+                console.error("Error loading template:", error);
+                showStatus("error", "Failed to load template");
+            }
+        } else {
+            // Fallback: Old templates without canvas data - recreate basic template
+            const socialTemplate = SOCIAL_TEMPLATES.find(t => t.name === savedTemplate.platform);
+            
+            // Find the brand kit used for this template
+            const templateBrand = brandKits.find(b => b.id === savedTemplate.brandKitId);
+            const brandToUse = templateBrand || activeBrand;
+            
+            if (!brandToUse) {
+                showStatus("error", "No brand kit available");
+                return;
+            }
+
+            if (socialTemplate) {
+                // Create the post with the template's settings
+                const params = {
+                    width: socialTemplate.width,
+                    height: socialTemplate.height,
+                    backgroundColor: hexToRgba(brandToUse.colors.background),
+                    accentColor: hexToRgba(brandToUse.colors.primary),
+                    secondaryColor: hexToRgba(brandToUse.colors.secondary),
+                    platformName: socialTemplate.name
+                };
+
+                await sandboxProxy.createBrandedPost(params);
+                setLastCreatedPlatform(socialTemplate.name);
+                
+                // Wait for page to be ready
+                await delay(300);
+
+                // Load images
+                const logoUrl = savedTemplate.logoUrl || brandToUse.logoUrl;
+                const { loadedImages, newTrackedImages } = await loadImagesToCanvas(
+                    savedTemplate.images || [],
+                    logoUrl
+                );
+                
+                setAddedImages(newTrackedImages);
+                
+                if (loadedImages > 0) {
+                    showStatus("success", `Loaded "${savedTemplate.name}" with ${loadedImages} images!`);
+                } else {
+                    showStatus("success", `Loaded "${savedTemplate.name}" (basic template)`);
+                }
+            } else {
+                showStatus("error", "This template has no saved canvas data");
+            }
+        }
     };
 
     // Delete saved template
@@ -233,6 +447,85 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
             showStatus("error", "Error checking compliance");
         } finally {
             setIsChecking(false);
+        }
+    };
+
+    // Add contact info to footer
+    const handleAddContactToFooter = async () => {
+        if (!activeBrand || !activeBrand.contactInfo) {
+            showStatus("error", "No contact info available");
+            return;
+        }
+
+        try {
+            const textColor = hexToRgba(activeBrand.colors.text);
+            const result = await sandboxProxy.createFooterText(activeBrand.contactInfo, textColor);
+            
+            if (result?.success) {
+                showStatus("success", "Added contact info to footer!");
+            } else {
+                showStatus("error", result?.message || "Could not add contact info");
+            }
+        } catch (e) {
+            console.error("Error adding contact to footer:", e);
+            showStatus("error", "Error adding contact info");
+        }
+    };
+
+    // Add brand logo to canvas
+    const handleAddLogo = async () => {
+        if (!activeBrand || !activeBrand.logoUrl) {
+            showStatus("error", "No logo available for this brand");
+            return;
+        }
+        
+        try {
+            const response = await fetch(activeBrand.logoUrl);
+            const blob = await response.blob();
+            await addOnUISdk.app.document.addImage(blob, {
+                title: `${activeBrand.name} Logo`
+            });
+            
+            // Track the logo for saving
+            setAddedImages(prev => [...prev, {
+                url: activeBrand.logoUrl!,
+                name: `${activeBrand.name} Logo`,
+                x: 20,
+                y: 20,
+                width: 100,
+                height: 100
+            }]);
+            
+            showStatus("success", `Added ${activeBrand.name} logo to canvas!`);
+        } catch (e) {
+            console.error("Error adding logo:", e);
+            showStatus("error", "Could not load logo");
+        }
+    };
+
+    // Add brand asset to canvas and track it for saving
+    const handleAddAsset = async (asset: BrandAsset) => {
+        try {
+            const response = await fetch(asset.url);
+            const blob = await response.blob();
+            await addOnUISdk.app.document.addImage(blob, {
+                title: asset.name
+            });
+            
+            // Track the asset for saving
+            setAddedImages(prev => [...prev, {
+                url: asset.url,
+                name: asset.name,
+                x: 100,
+                y: 100,
+                width: 100,
+                height: 100
+            }]);
+            
+            showStatus("success", `Added "${asset.name}" to canvas!`);
+        } catch (e) {
+            console.error("Error adding asset:", e);
+            showStatus("error", `Could not load ${asset.name}`);
         }
     };
 
@@ -325,6 +618,39 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
                                     <div className="info-item">📞 {activeBrand.contactInfo.phone}</div>
                                 )}
                             </div>
+                            <button 
+                                className="add-footer-btn"
+                                onClick={handleAddContactToFooter}
+                            >
+                                📋 Add Contact to Footer
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Brand Assets */}
+                    {activeBrand.assets && activeBrand.assets.length > 0 && (
+                        <div className="info-section">
+                            <div className="section-title">Brand Assets</div>
+                            <div className="assets-grid">
+                                {activeBrand.assets.map(asset => (
+                                    <div 
+                                        key={asset.id} 
+                                        className="asset-item"
+                                        onClick={() => handleAddAsset(asset)}
+                                        title={`Add ${asset.name} to canvas`}
+                                    >
+                                        <img 
+                                            src={asset.url} 
+                                            alt={asset.name}
+                                            className="asset-image"
+                                            onError={(e) => {
+                                                (e.target as HTMLImageElement).style.display = 'none';
+                                            }}
+                                        />
+                                        <span className="asset-name">{asset.name}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
 
@@ -358,6 +684,16 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
                             📱 Create Post
                         </button>
                     </div>
+                    
+                    {/* Add Logo Button */}
+                    {activeBrand.logoUrl && (
+                        <button 
+                            className="add-logo-btn"
+                            onClick={handleAddLogo}
+                        >
+                            🏷️ Add {activeBrand.name} Logo to Canvas
+                        </button>
+                    )}
                 </div>
             )}
         </div>
@@ -390,16 +726,16 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
             {/* Save Template Button */}
             <button 
                 className="save-template-btn"
-                onClick={handleSaveTemplate}
-                disabled={!lastCreatedPlatform}
+                onClick={handleOpenSaveModal}
             >
-                💾 Save Current Design as Template
+                💾 Save Current Canvas as Template
             </button>
 
             <div style={{ fontSize: '11px', color: '#a0a0a0', marginTop: '8px', textAlign: 'center' }}>
-                {lastCreatedPlatform 
-                    ? `Last created: ${lastCreatedPlatform}` 
-                    : "Create a post first, then save it"}
+                Saves editable elements - continue editing after load!
+                {addedImages.length > 0 && (
+                    <span style={{ color: '#6BCB77' }}> + {addedImages.length} image(s)</span>
+                )}
             </div>
         </div>
     );
@@ -421,27 +757,46 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
                     </div>
                 </div>
             ) : (
-                <div className="templates-list">
-                    {savedTemplates.slice().reverse().map(template => (
-                        <div key={template.id} className="template-item">
-                            <div className="template-info">
-                                <span className="template-icon">📄</span>
-                                <div>
-                                    <div className="template-name">{template.name}</div>
-                                    <div className="template-date">
-                                        {template.platform} • {new Date(template.createdAt).toLocaleDateString()}
+                <>
+                    <p style={{ fontSize: '10px', color: '#6BCB77', marginBottom: '12px', textAlign: 'center' }}>
+                        👆 Click a template to load it on canvas
+                    </p>
+                    <div className="templates-list">
+                        {savedTemplates.slice().reverse().map(template => (
+                            <div 
+                                key={template.id} 
+                                className="template-item clickable"
+                                onClick={() => handleLoadTemplate(template)}
+                                title="Click to load this template"
+                            >
+                                <div className="template-info">
+                                    <span className="template-icon">
+                                        {template.elements && template.elements.length > 0 ? '🎨' : '📄'}
+                                    </span>
+                                    <div>
+                                        <div className="template-name">{template.name}</div>
+                                        <div className="template-date">
+                                            {template.platform} • {new Date(template.createdAt).toLocaleDateString()}
+                                            {template.elements && (
+                                                <span className="element-count"> • {template.elements.length} elements</span>
+                                            )}
+                                            {template.images && template.images.length > 0 && (
+                                                <span className="image-count"> • {template.images.length} 🖼️</span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
+                                <button
+                                    className="template-delete"
+                                    onClick={(e) => handleDeleteTemplate(template.id, e)}
+                                    title="Delete template"
+                                >
+                                    ✕
+                                </button>
                             </div>
-                            <button
-                                className="template-delete"
-                                onClick={(e) => handleDeleteTemplate(template.id, e)}
-                            >
-                                ✕
-                            </button>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                </>
             )}
         </div>
     );
@@ -568,6 +923,49 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
                     {activeTab === 'templates' && renderTemplatesTab()}
                     {activeTab === 'compliance' && renderComplianceTab()}
                 </div>
+
+                {/* Save Template Modal */}
+                {showSaveModal && (
+                    <div className="modal-overlay">
+                        <div className="modal-content">
+                            <div className="modal-title">💾 Save Template</div>
+                            <p className="modal-subtitle">Give your design a name to save it</p>
+                            <input
+                                type="text"
+                                className="modal-input"
+                                value={templateNameInput}
+                                onChange={(e) => setTemplateNameInput(e.target.value)}
+                                placeholder="Enter template name..."
+                                autoFocus
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveTemplate();
+                                    if (e.key === 'Escape') handleCancelSave();
+                                }}
+                            />
+                            {addedImages.length > 0 ? (
+                                <div className="modal-info success">
+                                    ✓ {addedImages.length} image(s) + all shapes/text will be saved
+                                </div>
+                            ) : (
+                                <div className="modal-info">
+                                    📋 All shapes and text will be saved as editable elements
+                                </div>
+                            )}
+                            <div className="modal-buttons">
+                                <button className="modal-btn cancel" onClick={handleCancelSave}>
+                                    Cancel
+                                </button>
+                                <button 
+                                    className="modal-btn save" 
+                                    onClick={handleSaveTemplate}
+                                    disabled={!templateNameInput.trim()}
+                                >
+                                    Save Template
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </Theme>
     );

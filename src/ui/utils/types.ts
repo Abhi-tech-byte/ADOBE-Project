@@ -24,6 +24,13 @@ export interface SocialLinks {
     tiktok?: string;
 }
 
+export interface BrandAsset {
+    id: string;
+    name: string;
+    type: 'image' | 'icon' | 'pattern';
+    url: string;
+}
+
 export interface BrandKit {
     id: string;
     name: string;
@@ -31,6 +38,7 @@ export interface BrandKit {
     logoUrl?: string;
     contactInfo?: ContactInfo;
     socialLinks?: SocialLinks;
+    assets?: BrandAsset[];
 }
 
 export interface SocialTemplate {
@@ -42,12 +50,49 @@ export interface SocialTemplate {
     icon: string;
 }
 
+// Serialized element data for saving canvas state
+export interface SerializedElement {
+    type: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rotation: number;
+    fill?: { red: number; green: number; blue: number; alpha: number };
+    stroke?: { red: number; green: number; blue: number; alpha: number; width: number };
+    opacity?: number;
+    // For text elements
+    text?: string;
+    // For images (base64 or URL reference)
+    imageRef?: string;
+}
+
+// Image reference for reloading
+export interface SavedImageRef {
+    url: string;
+    name: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
 export interface SavedTemplate {
     id: string;
     name: string;
     brandKitId: string;
     platform: string;
     createdAt: string;
+    // Canvas data
+    pageWidth?: number;
+    pageHeight?: number;
+    elements?: SerializedElement[];
+    // Images that need to be reloaded from URLs
+    images?: SavedImageRef[];
+    // Brand logo URL if used
+    logoUrl?: string;
+    // Canvas snapshot as base64 PNG (for full canvas save)
+    snapshot?: string;
 }
 
 // Color utility type

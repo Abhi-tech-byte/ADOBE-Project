@@ -236,6 +236,274 @@ function start() {
             }
             
             return results;
+        },
+        
+        // Create text element with contact info
+        createContactText(text: string, color: RGBAColor, positionY: number) {
+            const currentPage = editor.context.currentPage;
+            const pageWidth = currentPage.width;
+            const pageHeight = currentPage.height;
+            
+            // Create text node
+            const textNode = editor.createText(text);
+            
+            // Position in footer area (bottom of page)
+            const yPos = positionY || (pageHeight - 40);
+            textNode.setPositionInParent(
+                { x: pageWidth / 2, y: yPos },
+                { x: textNode.boundsLocal.width / 2, y: 0 }
+            );
+            
+            // Add to artboard
+            const insertionParent = editor.context.insertionParent;
+            insertionParent.children.append(textNode);
+            
+            // Apply text color
+            textNode.fullContent.applyCharacterStyles({ color });
+            
+            return { success: true, text };
+        },
+        
+        // Create a text box in the footer area
+        createFooterText(contactInfo: { email?: string; phone?: string; website?: string }, textColor: RGBAColor) {
+            const currentPage = editor.context.currentPage;
+            const pageHeight = currentPage.height;
+            const pageWidth = currentPage.width;
+            
+            // Build contact text
+            const parts: string[] = [];
+            if (contactInfo.email) parts.push(contactInfo.email);
+            if (contactInfo.phone) parts.push(contactInfo.phone);
+            if (contactInfo.website) parts.push(contactInfo.website);
+            
+            if (parts.length === 0) {
+                return { success: false, message: "No contact info provided" };
+            }
+            
+            const contactText = parts.join("  •  ");
+            
+            // Create text node
+            const textNode = editor.createText(contactText);
+            
+            // Position in footer (bottom 5% of page, centered)
+            const yPos = pageHeight - (pageHeight * 0.04);
+            textNode.setPositionInParent(
+                { x: pageWidth / 2, y: yPos },
+                { x: textNode.boundsLocal.width / 2, y: textNode.boundsLocal.height / 2 }
+            );
+            
+            // Add to artboard
+            const insertionParent = editor.context.insertionParent;
+            insertionParent.children.append(textNode);
+            
+            // Apply text color
+            textNode.fullContent.applyCharacterStyles({ color: textColor });
+            
+            return { success: true, text: contactText };
+        },
+        
+        // Capture all elements on the current page/artboard
+        captureCanvasElements() {
+            const currentPage = editor.context.currentPage;
+            const insertionParent = editor.context.insertionParent;
+            const elements: any[] = [];
+            const imagePositions: any[] = []; // Track image positions separately
+            
+            // Iterate through all children of the artboard
+            for (const node of insertionParent.allChildren) {
+                try {
+                    // Skip media containers (images) - we handle them via tracked URLs
+                    // But capture their positions for reference
+                    if (node.type === 'MediaContainer' || node.type === 'ImageRectangle' || 
+                        node.type === 'GridCell' || node.type === 'GridLayout') {
+                        // Capture image position for reference
+                        if ('translation' in node && 'boundsLocal' in node) {
+                            const translation = (node as any).translation;
+                            const bounds = (node as any).boundsLocal;
+                            imagePositions.push({
+                                type: 'image',
+                                x: translation.x,
+                                y: translation.y,
+                                width: bounds.width,
+                                height: bounds.height
+                            });
+                        }
+                        continue; // Skip - images loaded via tracked URLs
+                    }
+                    
+                    // Skip unknown/complex types that we can't recreate
+                    const supportedTypes = ['Rectangle', 'Ellipse', 'Line', 'Text', 'Path', 'Group'];
+                    if (!supportedTypes.some(t => node.type.includes(t))) {
+                        console.log("Skipping unsupported type:", node.type);
+                        continue;
+                    }
+                    
+                    const elementData: any = {
+                        type: node.type,
+                        x: 0,
+                        y: 0,
+                        width: 0,
+                        height: 0,
+                        rotation: 0
+                    };
+                    
+                    // Get position and bounds
+                    if ('translation' in node) {
+                        const translation = (node as any).translation;
+                        elementData.x = translation.x;
+                        elementData.y = translation.y;
+                    }
+                    
+                    if ('boundsLocal' in node) {
+                        const bounds = (node as any).boundsLocal;
+                        elementData.width = bounds.width;
+                        elementData.height = bounds.height;
+                    }
+                    
+                    if ('width' in node && 'height' in node) {
+                        elementData.width = (node as any).width;
+                        elementData.height = (node as any).height;
+                    }
+                    
+                    if ('rotation' in node) {
+                        elementData.rotation = (node as any).rotation;
+                    }
+                    
+                    if ('opacity' in node) {
+                        elementData.opacity = (node as any).opacity;
+                    }
+                    
+                    // Get fill color
+                    if ('fill' in node) {
+                        const fill = (node as any).fill;
+                        if (fill && fill.color) {
+                            elementData.fill = {
+                                red: fill.color.red,
+                                green: fill.color.green,
+                                blue: fill.color.blue,
+                                alpha: fill.color.alpha || 1
+                            };
+                        }
+                    }
+                    
+                    // Get stroke
+                    if ('stroke' in node) {
+                        const stroke = (node as any).stroke;
+                        if (stroke && stroke.color) {
+                            elementData.stroke = {
+                                red: stroke.color.red,
+                                green: stroke.color.green,
+                                blue: stroke.color.blue,
+                                alpha: stroke.color.alpha || 1,
+                                width: stroke.width || 1
+                            };
+                        }
+                    }
+                    
+                    // Get text content
+                    if (node.type === 'Text' && 'fullContent' in node) {
+                        try {
+                            elementData.text = (node as any).fullContent.text;
+                        } catch (e) {
+                            // Text might not be accessible
+                        }
+                    }
+                    
+                    elements.push(elementData);
+                } catch (e) {
+                    console.log("Could not capture element:", e);
+                }
+            }
+            
+            return {
+                pageWidth: currentPage.width,
+                pageHeight: currentPage.height,
+                elements,
+                imageCount: imagePositions.length // Report how many images we found
+            };
+        },
+        
+        // Recreate elements from saved data
+        recreateCanvasElements(data: { pageWidth: number; pageHeight: number; elements: any[] }) {
+            const { pageWidth, pageHeight, elements } = data;
+            
+            // Create a new page with saved dimensions
+            const newPage = editor.documentRoot.pages.addPage({ width: pageWidth, height: pageHeight });
+            const insertionParent = editor.context.insertionParent;
+            
+            let recreatedCount = 0;
+            
+            for (const elem of elements) {
+                try {
+                    if (elem.type === 'Rectangle' || elem.type === 'rectangle') {
+                        const rect = editor.createRectangle();
+                        rect.width = elem.width || 100;
+                        rect.height = elem.height || 100;
+                        rect.translation = { x: elem.x || 0, y: elem.y || 0 };
+                        
+                        if (elem.fill) {
+                            rect.fill = editor.makeColorFill(elem.fill);
+                        }
+                        
+                        if (elem.rotation) {
+                            rect.setRotationInParent(elem.rotation, rect.centerPointLocal);
+                        }
+                        
+                        if (elem.opacity !== undefined) {
+                            rect.opacity = elem.opacity;
+                        }
+                        
+                        insertionParent.children.append(rect);
+                        recreatedCount++;
+                    } else if (elem.type === 'Ellipse' || elem.type === 'ellipse') {
+                        const ellipse = editor.createEllipse();
+                        ellipse.rx = (elem.width || 100) / 2;
+                        ellipse.ry = (elem.height || 100) / 2;
+                        ellipse.translation = { x: elem.x || 0, y: elem.y || 0 };
+                        
+                        if (elem.fill) {
+                            ellipse.fill = editor.makeColorFill(elem.fill);
+                        }
+                        
+                        if (elem.opacity !== undefined) {
+                            ellipse.opacity = elem.opacity;
+                        }
+                        
+                        insertionParent.children.append(ellipse);
+                        recreatedCount++;
+                    } else if (elem.type === 'Line' || elem.type === 'line') {
+                        const line = editor.createLine();
+                        line.setEndPoints(
+                            elem.x || 0, 
+                            elem.y || 0, 
+                            (elem.x || 0) + (elem.width || 100), 
+                            (elem.y || 0) + (elem.height || 0)
+                        );
+                        insertionParent.children.append(line);
+                        recreatedCount++;
+                    } else if (elem.type === 'Text' && elem.text) {
+                        const textNode = editor.createText(elem.text);
+                        textNode.setPositionInParent(
+                            { x: elem.x || 0, y: elem.y || 0 },
+                            { x: 0, y: 0 }
+                        );
+                        
+                        if (elem.fill) {
+                            textNode.fullContent.applyCharacterStyles({ color: elem.fill });
+                        }
+                        
+                        insertionParent.children.append(textNode);
+                        recreatedCount++;
+                    } else {
+                        // Skip unsupported types - don't create placeholders
+                        console.log("Skipping unsupported element type:", elem.type);
+                    }
+                } catch (e) {
+                    console.log("Could not recreate element:", elem.type, e);
+                }
+            }
+            
+            return { success: true, recreatedCount, total: elements.length };
         }
     });
 }
