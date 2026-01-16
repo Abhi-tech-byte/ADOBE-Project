@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="description" content="BrandFlow - Enterprise Brand Studio for Adobe Express" />
+        <meta name="keywords" content="Adobe, Express, Add-On, BrandFlow, Brand Kit, Social Media, Templates" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>BrandFlow</title>
+        <style>
+            /* Critical CSS for fast initial load */
+            html, body, #root {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                overflow: hidden;
+                background: #1a1a2e;
+            }
+            
+            /* Loading state */
+            .loading-screen {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                height: 100vh;
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+                color: white;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            }
+            
+            .loading-logo {
+                font-size: 24px;
+                font-weight: 700;
+                background: linear-gradient(135deg, #FF6B6B, #FFD93D, #6BCB77);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                margin-bottom: 16px;
+            }
+            
+            .loading-spinner {
+                width: 32px;
+                height: 32px;
+                border: 3px solid rgba(255, 255, 255, 0.1);
+                border-top-color: #FF6B6B;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+            }
+            
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+        </style>
+    </head>
+    <body>
+        <div id="root">
+            <!-- Loading state while React loads -->
+            <div class="loading-screen">
+                <div class="loading-logo">⚡ BRANDFLOW</div>
+                <div class="loading-spinner"></div>
+            </div>
+        </div>
+    </body>
+</html>
