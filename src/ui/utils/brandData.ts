@@ -27,9 +27,10 @@ export const DEFAULT_BRAND_KITS: BrandKit[] = [
             youtube: "Adobe"
         },
         assets: [
-            { id: "adobe-logo-white", name: "Logo (White)", type: "image", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Adobe_Systems_logo_and_wordmark.svg/200px-Adobe_Systems_logo_and_wordmark.svg.png" },
-            { id: "adobe-icon", name: "Icon", type: "icon", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Adobe_PDF_icon.svg/100px-Adobe_PDF_icon.svg.png" },
-            { id: "adobe-creative", name: "Creative Cloud", type: "icon", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Adobe_Creative_Cloud_rainbow_icon.svg/100px-Adobe_Creative_Cloud_rainbow_icon.svg.png" }
+            { id: "adobe-logo-white", name: "Logo", type: "image", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Adobe_Corporate_Logo.png/200px-Adobe_Corporate_Logo.png" },
+            { id: "adobe-icon", name: "PDF Icon", type: "icon", url: "https://cdn-icons-png.flaticon.com/128/337/337946.png" },
+            { id: "adobe-creative", name: "Creative Cloud", type: "icon", url: "https://cdn-icons-png.flaticon.com/128/5968/5968428.png" },
+            { id: "adobe-copyright", name: "© Copyright", type: "icon", url: "TEXT:© Adobe Inc." }
         ]
     },
     {
@@ -56,9 +57,10 @@ export const DEFAULT_BRAND_KITS: BrandKit[] = [
             youtube: "Google"
         },
         assets: [
-            { id: "google-g", name: "G Logo", type: "icon", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/100px-Google_%22G%22_logo.svg.png" },
-            { id: "google-drive", name: "Drive Icon", type: "icon", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Google_Drive_icon_%282020%29.svg/100px-Google_Drive_icon_%282020%29.svg.png" },
-            { id: "google-maps", name: "Maps Icon", type: "icon", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Google_Maps_icon.svg/100px-Google_Maps_icon.svg.png" }
+            { id: "google-g", name: "G Logo", type: "icon", url: "https://cdn-icons-png.flaticon.com/128/2991/2991148.png" },
+            { id: "google-drive", name: "Drive Icon", type: "icon", url: "https://cdn-icons-png.flaticon.com/128/5968/5968523.png" },
+            { id: "google-maps", name: "Maps Icon", type: "icon", url: "https://cdn-icons-png.flaticon.com/128/2991/2991110.png" },
+            { id: "google-copyright", name: "© Copyright", type: "icon", url: "TEXT:© Google LLC" }
         ]
     },
     {
@@ -86,9 +88,10 @@ export const DEFAULT_BRAND_KITS: BrandKit[] = [
             youtube: "Microsoft"
         },
         assets: [
-            { id: "ms-windows", name: "Windows Logo", type: "icon", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Windows_logo_-_2021.svg/100px-Windows_logo_-_2021.svg.png" },
-            { id: "ms-office", name: "Office Icon", type: "icon", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0c/Microsoft_Office_logo_%282013%E2%80%932019%29.svg/100px-Microsoft_Office_logo_%282013%E2%80%932019%29.svg.png" },
-            { id: "ms-teams", name: "Teams Icon", type: "icon", url: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Microsoft_Office_Teams_%282018%E2%80%93present%29.svg/100px-Microsoft_Office_Teams_%282018%E2%80%93present%29.svg.png" }
+            { id: "ms-windows", name: "Windows Logo", type: "icon", url: "https://cdn-icons-png.flaticon.com/128/732/732225.png" },
+            { id: "ms-office", name: "Office Icon", type: "icon", url: "https://cdn-icons-png.flaticon.com/128/732/732221.png" },
+            { id: "ms-teams", name: "Teams Icon", type: "icon", url: "https://cdn-icons-png.flaticon.com/128/906/906349.png" },
+            { id: "ms-copyright", name: "© Copyright", type: "icon", url: "TEXT:© Microsoft Corp." }
         ]
     }
 ];

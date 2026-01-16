@@ -16,6 +16,7 @@ import {
     getSavedTemplates,
     saveTemplate,
     deleteTemplate,
+    clearAllTemplates,
     rgbaToHex
 } from "../utils/brandStorage";
 import "./App.css";
@@ -183,11 +184,11 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
             
             // Capture all elements on the current canvas
             const canvasData = await sandboxProxy.captureCanvasElements();
-            
-            const newTemplate: SavedTemplate = {
+
+        const newTemplate: SavedTemplate = {
                 id: `template_${Date.now()}`,
                 name: templateNameInput.trim(),
-                brandKitId: activeBrand.id,
+            brandKitId: activeBrand.id,
                 platform: lastCreatedPlatform || "Custom Design",
                 createdAt: new Date().toISOString(),
                 // Store the actual canvas data
@@ -200,7 +201,7 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
                 logoUrl: activeBrand.logoUrl
             };
             
-            saveTemplate(newTemplate);
+        saveTemplate(newTemplate);
             
             // Refresh the templates list
             const updatedTemplates = getSavedTemplates();
@@ -236,7 +237,7 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
     // Helper to add delay for context sync
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-    // Helper to load images onto canvas
+    // Helper to load images onto canvas from URLs
     const loadImagesToCanvas = async (images: SavedImageRef[], logoUrl?: string) => {
         let loadedImages = 0;
         const newTrackedImages: SavedImageRef[] = [];
@@ -304,7 +305,7 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
                 // Wait for the new page to be ready before adding images
                 await delay(300);
                 
-                // Load images
+                // Load URL-tracked images (from brand assets)
                 showStatus("info", "Loading images...");
                 const { loadedImages, newTrackedImages } = await loadImagesToCanvas(
                     savedTemplate.images || [],
@@ -378,6 +379,17 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
         deleteTemplate(id);
         setSavedTemplates(getSavedTemplates());
         showStatus("info", "Template removed");
+    };
+
+    // Clear all saved templates
+    const handleClearAllTemplates = () => {
+        if (savedTemplates.length === 0) {
+            showStatus("info", "No templates to clear");
+            return;
+        }
+        clearAllTemplates();
+        setSavedTemplates([]);
+        showStatus("success", "All templates cleared!");
     };
 
     // Quick action: Create rectangle with primary color
@@ -506,6 +518,15 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
     // Add brand asset to canvas and track it for saving
     const handleAddAsset = async (asset: BrandAsset) => {
         try {
+            // Handle TEXT: prefix for copyright/text elements
+            if (asset.url.startsWith("TEXT:")) {
+                const textContent = asset.url.replace("TEXT:", "");
+                const textColor = activeBrand ? hexToRgba(activeBrand.colors.text) : { red: 0, green: 0, blue: 0, alpha: 1 };
+                await sandboxProxy.createContactText(textContent, textColor, 0);
+                showStatus("success", `Added "${textContent}" to canvas!`);
+                return;
+            }
+            
             const response = await fetch(asset.url);
             const blob = await response.blob();
             await addOnUISdk.app.document.addImage(blob, {
@@ -639,14 +660,18 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
                                         onClick={() => handleAddAsset(asset)}
                                         title={`Add ${asset.name} to canvas`}
                                     >
-                                        <img 
-                                            src={asset.url} 
-                                            alt={asset.name}
-                                            className="asset-image"
-                                            onError={(e) => {
-                                                (e.target as HTMLImageElement).style.display = 'none';
-                                            }}
-                                        />
+                                        {asset.url.startsWith("TEXT:") ? (
+                                            <div className="asset-text-icon">©</div>
+                                        ) : (
+                                            <img 
+                                                src={asset.url} 
+                                                alt={asset.name}
+                                                className="asset-image"
+                                                onError={(e) => {
+                                                    (e.target as HTMLImageElement).style.display = 'none';
+                                                }}
+                                            />
+                                        )}
                                         <span className="asset-name">{asset.name}</span>
                                     </div>
                                 ))}
@@ -673,15 +698,12 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
                     )}
 
                     {/* Quick Actions */}
-                    <div className="quick-actions">
-                        <button className="quick-action-btn" onClick={handleQuickRectangle}>
-                            + Rectangle
-                        </button>
+                    <div className="quick-actions" style={{ justifyContent: 'center' }}>
                         <button
-                            className="quick-action-btn"
+                            className="quick-action-btn primary"
                             onClick={() => setActiveTab("social")}
                         >
-                            📱 Create Post
+                            📱 Create Branded Post
                         </button>
                     </div>
                     
@@ -761,22 +783,22 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
                     <p style={{ fontSize: '10px', color: '#6BCB77', marginBottom: '12px', textAlign: 'center' }}>
                         👆 Click a template to load it on canvas
                     </p>
-                    <div className="templates-list">
-                        {savedTemplates.slice().reverse().map(template => (
+                <div className="templates-list">
+                    {savedTemplates.slice().reverse().map(template => (
                             <div 
                                 key={template.id} 
                                 className="template-item clickable"
                                 onClick={() => handleLoadTemplate(template)}
                                 title="Click to load this template"
                             >
-                                <div className="template-info">
+                            <div className="template-info">
                                     <span className="template-icon">
                                         {template.elements && template.elements.length > 0 ? '🎨' : '📄'}
                                     </span>
-                                    <div>
-                                        <div className="template-name">{template.name}</div>
-                                        <div className="template-date">
-                                            {template.platform} • {new Date(template.createdAt).toLocaleDateString()}
+                                <div>
+                                    <div className="template-name">{template.name}</div>
+                                    <div className="template-date">
+                                        {template.platform} • {new Date(template.createdAt).toLocaleDateString()}
                                             {template.elements && (
                                                 <span className="element-count"> • {template.elements.length} elements</span>
                                             )}
@@ -784,18 +806,26 @@ const App = ({ addOnUISdk, sandboxProxy }: AppProps) => {
                                                 <span className="image-count"> • {template.images.length} 🖼️</span>
                                             )}
                                         </div>
-                                    </div>
                                 </div>
-                                <button
-                                    className="template-delete"
-                                    onClick={(e) => handleDeleteTemplate(template.id, e)}
-                                    title="Delete template"
-                                >
-                                    ✕
-                                </button>
                             </div>
-                        ))}
-                    </div>
+                            <button
+                                className="template-delete"
+                                onClick={(e) => handleDeleteTemplate(template.id, e)}
+                                    title="Delete template"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    ))}
+                </div>
+                    
+                    {/* Clear All Button */}
+                    <button 
+                        className="clear-all-btn"
+                        onClick={handleClearAllTemplates}
+                    >
+                        🗑️ Clear All Templates
+                    </button>
                 </>
             )}
         </div>

@@ -25,6 +25,10 @@ function start() {
         createBrandedPost(params: SocialTemplateParams) {
             const { width, height, backgroundColor, accentColor, secondaryColor, platformName } = params;
             
+            // Detect orientation
+            const isPortrait = height > width;
+            const isSquare = width === height;
+            
             // Create a new page with the exact social media dimensions
             const newPage = editor.documentRoot.pages.addPage({ width, height });
             
@@ -39,8 +43,13 @@ function start() {
             bg.fill = editor.makeColorFill(backgroundColor);
             insertionParent.children.append(bg);
             
-            // Create top header bar (12% of height)
-            const headerHeight = Math.round(height * 0.12);
+            // Adjust header/footer sizes based on orientation
+            // Portrait: use smaller percentages, Landscape/Square: standard
+            const headerPercent = isPortrait ? 0.06 : 0.12;
+            const footerPercent = isPortrait ? 0.05 : 0.08;
+            
+            // Create top header bar
+            const headerHeight = Math.round(height * headerPercent);
             const header = editor.createRectangle();
             header.width = width;
             header.height = headerHeight;
@@ -48,8 +57,8 @@ function start() {
             header.fill = editor.makeColorFill(accentColor);
             insertionParent.children.append(header);
             
-            // Create bottom footer bar (8% of height)
-            const footerHeight = Math.round(height * 0.08);
+            // Create bottom footer bar
+            const footerHeight = Math.round(height * footerPercent);
             const footer = editor.createRectangle();
             footer.width = width;
             footer.height = footerHeight;
@@ -57,8 +66,8 @@ function start() {
             footer.fill = editor.makeColorFill(accentColor);
             insertionParent.children.append(footer);
             
-            // Create side accent bar (left side, 3% width)
-            const sideBarWidth = Math.round(width * 0.03);
+            // Create side accent bar (left side)
+            const sideBarWidth = Math.round(width * 0.02);
             const sideBar = editor.createRectangle();
             sideBar.width = sideBarWidth;
             sideBar.height = height - headerHeight - footerHeight;
@@ -67,8 +76,10 @@ function start() {
             insertionParent.children.append(sideBar);
             
             // Create center content placeholder area
-            const contentWidth = Math.round(width * 0.6);
-            const contentHeight = Math.round(height * 0.4);
+            const contentWidthPercent = isPortrait ? 0.8 : 0.6;
+            const contentHeightPercent = isPortrait ? 0.3 : 0.4;
+            const contentWidth = Math.round(width * contentWidthPercent);
+            const contentHeight = Math.round(height * contentHeightPercent);
             const contentRect = editor.createRectangle();
             contentRect.width = contentWidth;
             contentRect.height = contentHeight;
@@ -86,21 +97,24 @@ function start() {
             contentRect.fill = editor.makeColorFill(lightAccent);
             insertionParent.children.append(contentRect);
             
-            // Create logo placeholder (top-left of header)
-            const logoSize = Math.round(headerHeight * 0.7);
+            // Create logo placeholder - sized based on width for consistency
+            const logoSize = isPortrait 
+                ? Math.round(width * 0.12)  // Portrait: 12% of width
+                : Math.round(headerHeight * 0.7); // Landscape: 70% of header height
+            
             const logoPlaceholder = editor.createRectangle();
             logoPlaceholder.width = logoSize;
             logoPlaceholder.height = logoSize;
             logoPlaceholder.translation = { 
-                x: 20, 
-                y: (headerHeight - logoSize) / 2 
+                x: Math.round(width * 0.03), // 3% from left edge
+                y: Math.round((headerHeight - logoSize) / 2)
             };
             logoPlaceholder.fill = editor.makeColorFill({
                 red: 1, green: 1, blue: 1, alpha: 0.3
             });
             insertionParent.children.append(logoPlaceholder);
             
-            console.log(`Created ${platformName} page: ${width}x${height}`);
+            console.log(`Created ${platformName} page: ${width}x${height} (${isPortrait ? 'portrait' : isSquare ? 'square' : 'landscape'})`);
         },
         
         // Resize current page to social media dimensions
@@ -111,17 +125,31 @@ function start() {
             console.log(`Resized current page to: ${width}x${height}`);
         },
         
-        // Apply color to currently selected element
+        // Apply color to currently selected element (including text)
         applyColorToSelection(color: RGBAColor) {
             const selection = editor.context.selection;
             if (selection && selection.length > 0) {
+                let appliedCount = 0;
                 for (const node of selection) {
-                    if ('fill' in node && typeof (node as any).fill !== 'undefined') {
+                    // Handle Text nodes differently - use character styles
+                    if (node.type === 'Text') {
+                        try {
+                            const textNode = node as any;
+                            textNode.fullContent.applyCharacterStyles({ color });
+                            appliedCount++;
+                            console.log("Applied color to text");
+                        } catch (e) {
+                            console.log("Could not apply color to text:", e);
+                        }
+                    }
+                    // Handle fillable nodes (rectangles, ellipses, etc.)
+                    else if ('fill' in node && typeof (node as any).fill !== 'undefined') {
                         (node as any).fill = editor.makeColorFill(color);
+                        appliedCount++;
                     }
                 }
-                console.log(`Applied color to ${selection.length} element(s)`);
-                return { success: true, count: selection.length };
+                console.log(`Applied color to ${appliedCount} element(s)`);
+                return { success: appliedCount > 0, count: appliedCount };
             } else {
                 console.log("No elements selected");
                 return { success: false, count: 0 };
@@ -270,6 +298,11 @@ function start() {
             const pageHeight = currentPage.height;
             const pageWidth = currentPage.width;
             
+            // Detect orientation for footer sizing
+            const isPortrait = pageHeight > pageWidth;
+            const footerPercent = isPortrait ? 0.05 : 0.08;
+            const footerHeight = Math.round(pageHeight * footerPercent);
+            
             // Build contact text
             const parts: string[] = [];
             if (contactInfo.email) parts.push(contactInfo.email);
@@ -285,16 +318,17 @@ function start() {
             // Create text node
             const textNode = editor.createText(contactText);
             
-            // Position in footer (bottom 5% of page, centered)
-            const yPos = pageHeight - (pageHeight * 0.04);
+            // Add to artboard first so bounds are calculated
+            const insertionParent = editor.context.insertionParent;
+            insertionParent.children.append(textNode);
+            
+            // Position in footer bar (vertically centered in footer area)
+            const footerTop = pageHeight - footerHeight;
+            const yPos = footerTop + (footerHeight / 2);
             textNode.setPositionInParent(
                 { x: pageWidth / 2, y: yPos },
                 { x: textNode.boundsLocal.width / 2, y: textNode.boundsLocal.height / 2 }
             );
-            
-            // Add to artboard
-            const insertionParent = editor.context.insertionParent;
-            insertionParent.children.append(textNode);
             
             // Apply text color
             textNode.fullContent.applyCharacterStyles({ color: textColor });
@@ -305,83 +339,131 @@ function start() {
         // Capture all elements on the current page/artboard
         captureCanvasElements() {
             const currentPage = editor.context.currentPage;
-            const insertionParent = editor.context.insertionParent;
-            const elements: any[] = [];
-            const imagePositions: any[] = []; // Track image positions separately
+            const artboard = currentPage.artboards.first;
             
-            // Iterate through all children of the artboard
-            for (const node of insertionParent.allChildren) {
+            if (!artboard) {
+                return {
+                    pageWidth: currentPage.width,
+                    pageHeight: currentPage.height,
+                    elements: [],
+                    imageCount: 0
+                };
+            }
+            
+            const elements: any[] = [];
+            let imageCount = 0;
+            
+            // Use artboard.children to get the direct children
+            const children = artboard.children.toArray();
+            console.log(`Capturing ${children.length} children from artboard`);
+            
+            for (const node of children) {
                 try {
-                    // Skip media containers (images) - we handle them via tracked URLs
-                    // But capture their positions for reference
-                    if (node.type === 'MediaContainer' || node.type === 'ImageRectangle' || 
-                        node.type === 'GridCell' || node.type === 'GridLayout') {
-                        // Capture image position for reference
-                        if ('translation' in node && 'boundsLocal' in node) {
-                            const translation = (node as any).translation;
-                            const bounds = (node as any).boundsLocal;
-                            imagePositions.push({
-                                type: 'image',
-                                x: translation.x,
-                                y: translation.y,
-                                width: bounds.width,
-                                height: bounds.height
-                            });
-                        }
-                        continue; // Skip - images loaded via tracked URLs
-                    }
+                    const nodeType = node.type;
+                    console.log(`Processing node type: ${nodeType}`);
                     
-                    // Skip unknown/complex types that we can't recreate
-                    const supportedTypes = ['Rectangle', 'Ellipse', 'Line', 'Text', 'Path', 'Group'];
-                    if (!supportedTypes.some(t => node.type.includes(t))) {
-                        console.log("Skipping unsupported type:", node.type);
+                    // Skip media/image types - these are tracked separately via URLs
+                    if (nodeType === 'MediaContainer' || nodeType === 'ImageRectangle' || 
+                        nodeType === 'GridCell' || nodeType === 'GridLayout' ||
+                        nodeType === 'UnknownMediaRectangle') {
+                        imageCount++;
                         continue;
                     }
                     
                     const elementData: any = {
-                        type: node.type,
-                        x: 0,
-                        y: 0,
-                        width: 0,
-                        height: 0,
-                        rotation: 0
+                        type: nodeType
                     };
                     
-                    // Get position and bounds
+                    // Get translation (position)
                     if ('translation' in node) {
-                        const translation = (node as any).translation;
-                        elementData.x = translation.x;
-                        elementData.y = translation.y;
+                        const t = (node as any).translation;
+                        elementData.x = t.x;
+                        elementData.y = t.y;
                     }
                     
-                    if ('boundsLocal' in node) {
-                        const bounds = (node as any).boundsLocal;
-                        elementData.width = bounds.width;
-                        elementData.height = bounds.height;
-                    }
-                    
-                    if ('width' in node && 'height' in node) {
-                        elementData.width = (node as any).width;
-                        elementData.height = (node as any).height;
-                    }
-                    
+                    // Get rotation
                     if ('rotation' in node) {
                         elementData.rotation = (node as any).rotation;
                     }
                     
+                    // Get opacity
                     if ('opacity' in node) {
                         elementData.opacity = (node as any).opacity;
                     }
                     
-                    // Get fill color
+                    // Rectangle specific
+                    if (nodeType === 'Rectangle') {
+                        const rect = node as any;
+                        elementData.width = rect.width;
+                        elementData.height = rect.height;
+                        elementData.topLeftRadius = rect.topLeftRadius;
+                        elementData.topRightRadius = rect.topRightRadius;
+                        elementData.bottomLeftRadius = rect.bottomLeftRadius;
+                        elementData.bottomRightRadius = rect.bottomRightRadius;
+                    }
+                    
+                    // Ellipse specific
+                    if (nodeType === 'Ellipse') {
+                        const ellipse = node as any;
+                        elementData.rx = ellipse.rx;
+                        elementData.ry = ellipse.ry;
+                    }
+                    
+                    // Line specific
+                    if (nodeType === 'Line') {
+                        const line = node as any;
+                        elementData.startX = line.startX;
+                        elementData.startY = line.startY;
+                        elementData.endX = line.endX;
+                        elementData.endY = line.endY;
+                    }
+                    
+                    // Text specific
+                    if (nodeType === 'Text') {
+                        try {
+                            const textNode = node as any;
+                            elementData.text = textNode.fullContent.text;
+                            elementData.textAlignment = textNode.textAlignment;
+                            
+                            // Get the visual position using boundsInParent (not translation)
+                            const boundsInParent = textNode.boundsInParent;
+                            elementData.visualX = boundsInParent.x;
+                            elementData.visualY = boundsInParent.y;
+                            elementData.visualWidth = boundsInParent.width;
+                            elementData.visualHeight = boundsInParent.height;
+                            
+                            // Also capture topLeftLocal for offset calculation
+                            const topLeft = textNode.topLeftLocal;
+                            elementData.topLeftX = topLeft.x;
+                            elementData.topLeftY = topLeft.y;
+                        } catch (e) {
+                            console.log("Could not get text content:", e);
+                        }
+                    }
+                    
+                    // Path specific
+                    if (nodeType === 'Path') {
+                        try {
+                            const pathNode = node as any;
+                            elementData.path = pathNode.path;
+                            elementData.fillRule = pathNode.fillRule;
+                            const bounds = pathNode.boundsLocal;
+                            elementData.boundsWidth = bounds.width;
+                            elementData.boundsHeight = bounds.height;
+                        } catch (e) {
+                            console.log("Could not get path data:", e);
+                        }
+                    }
+                    
+                    // Get fill (for fillable nodes)
                     if ('fill' in node) {
                         const fill = (node as any).fill;
-                        if (fill && fill.color) {
+                        if (fill && fill.type === 'Color' && fill.color) {
                             elementData.fill = {
                                 red: fill.color.red,
                                 green: fill.color.green,
                                 blue: fill.color.blue,
-                                alpha: fill.color.alpha || 1
+                                alpha: fill.color.alpha !== undefined ? fill.color.alpha : 1
                             };
                         }
                     }
@@ -394,32 +476,27 @@ function start() {
                                 red: stroke.color.red,
                                 green: stroke.color.green,
                                 blue: stroke.color.blue,
-                                alpha: stroke.color.alpha || 1,
+                                alpha: stroke.color.alpha !== undefined ? stroke.color.alpha : 1,
                                 width: stroke.width || 1
                             };
                         }
                     }
                     
-                    // Get text content
-                    if (node.type === 'Text' && 'fullContent' in node) {
-                        try {
-                            elementData.text = (node as any).fullContent.text;
-                        } catch (e) {
-                            // Text might not be accessible
-                        }
-                    }
-                    
                     elements.push(elementData);
+                    console.log(`Captured: ${nodeType}`, elementData);
+                    
                 } catch (e) {
-                    console.log("Could not capture element:", e);
+                    console.log("Could not capture element:", node.type, e);
                 }
             }
+            
+            console.log(`Captured ${elements.length} elements, ${imageCount} images skipped`);
             
             return {
                 pageWidth: currentPage.width,
                 pageHeight: currentPage.height,
                 elements,
-                imageCount: imagePositions.length // Report how many images we found
+                imageCount
             };
         },
         
@@ -429,20 +506,41 @@ function start() {
             
             // Create a new page with saved dimensions
             const newPage = editor.documentRoot.pages.addPage({ width: pageWidth, height: pageHeight });
-            const insertionParent = editor.context.insertionParent;
+            const artboard = newPage.artboards.first;
+            
+            if (!artboard) {
+                return { success: false, recreatedCount: 0, total: elements.length, error: "No artboard" };
+            }
             
             let recreatedCount = 0;
             
+            console.log(`Recreating ${elements.length} elements on new page ${pageWidth}x${pageHeight}`);
+            
             for (const elem of elements) {
                 try {
-                    if (elem.type === 'Rectangle' || elem.type === 'rectangle') {
+                    console.log(`Recreating: ${elem.type}`, elem);
+                    
+                    if (elem.type === 'Rectangle') {
                         const rect = editor.createRectangle();
                         rect.width = elem.width || 100;
                         rect.height = elem.height || 100;
                         rect.translation = { x: elem.x || 0, y: elem.y || 0 };
                         
+                        // Apply corner radii
+                        if (elem.topLeftRadius !== undefined) rect.topLeftRadius = elem.topLeftRadius;
+                        if (elem.topRightRadius !== undefined) rect.topRightRadius = elem.topRightRadius;
+                        if (elem.bottomLeftRadius !== undefined) rect.bottomLeftRadius = elem.bottomLeftRadius;
+                        if (elem.bottomRightRadius !== undefined) rect.bottomRightRadius = elem.bottomRightRadius;
+                        
                         if (elem.fill) {
                             rect.fill = editor.makeColorFill(elem.fill);
+                        }
+                        
+                        if (elem.stroke) {
+                            rect.stroke = editor.makeStroke({ 
+                                color: elem.stroke, 
+                                width: elem.stroke.width 
+                            });
                         }
                         
                         if (elem.rotation) {
@@ -453,55 +551,129 @@ function start() {
                             rect.opacity = elem.opacity;
                         }
                         
-                        insertionParent.children.append(rect);
+                        artboard.children.append(rect);
                         recreatedCount++;
-                    } else if (elem.type === 'Ellipse' || elem.type === 'ellipse') {
+                        
+                    } else if (elem.type === 'Ellipse') {
                         const ellipse = editor.createEllipse();
-                        ellipse.rx = (elem.width || 100) / 2;
-                        ellipse.ry = (elem.height || 100) / 2;
+                        ellipse.rx = elem.rx || 50;
+                        ellipse.ry = elem.ry || 50;
                         ellipse.translation = { x: elem.x || 0, y: elem.y || 0 };
                         
                         if (elem.fill) {
                             ellipse.fill = editor.makeColorFill(elem.fill);
                         }
                         
+                        if (elem.stroke) {
+                            ellipse.stroke = editor.makeStroke({ 
+                                color: elem.stroke, 
+                                width: elem.stroke.width 
+                            });
+                        }
+                        
                         if (elem.opacity !== undefined) {
                             ellipse.opacity = elem.opacity;
                         }
                         
-                        insertionParent.children.append(ellipse);
+                        artboard.children.append(ellipse);
                         recreatedCount++;
-                    } else if (elem.type === 'Line' || elem.type === 'line') {
+                        
+                    } else if (elem.type === 'Line') {
                         const line = editor.createLine();
                         line.setEndPoints(
-                            elem.x || 0, 
-                            elem.y || 0, 
-                            (elem.x || 0) + (elem.width || 100), 
-                            (elem.y || 0) + (elem.height || 0)
-                        );
-                        insertionParent.children.append(line);
-                        recreatedCount++;
-                    } else if (elem.type === 'Text' && elem.text) {
-                        const textNode = editor.createText(elem.text);
-                        textNode.setPositionInParent(
-                            { x: elem.x || 0, y: elem.y || 0 },
-                            { x: 0, y: 0 }
+                            elem.startX || 0,
+                            elem.startY || 0,
+                            elem.endX || 100,
+                            elem.endY || 100
                         );
                         
+                        if (elem.stroke) {
+                            line.stroke = editor.makeStroke({ 
+                                color: elem.stroke, 
+                                width: elem.stroke.width 
+                            });
+                        }
+                        
+                        artboard.children.append(line);
+                        recreatedCount++;
+                        
+                    } else if (elem.type === 'Text' && elem.text) {
+                        const textNode = editor.createText(elem.text);
+                        
+                        // Apply text color first (before positioning, as it may affect bounds)
                         if (elem.fill) {
                             textNode.fullContent.applyCharacterStyles({ color: elem.fill });
                         }
                         
-                        insertionParent.children.append(textNode);
+                        // Apply alignment
+                        if (elem.textAlignment !== undefined) {
+                            textNode.textAlignment = elem.textAlignment;
+                        }
+                        
+                        // Add to artboard first so positioning works correctly
+                        artboard.children.append(textNode);
+                        
+                        // Position text using the visual position we captured
+                        // Use the text's own topLeftLocal as the registration point
+                        if (elem.visualX !== undefined && elem.visualY !== undefined) {
+                            textNode.setPositionInParent(
+                                { x: elem.visualX, y: elem.visualY },
+                                textNode.topLeftLocal
+                            );
+                        } else {
+                            // Fallback to old method
+                            textNode.setPositionInParent(
+                                { x: elem.x || 0, y: elem.y || 0 },
+                                { x: 0, y: 0 }
+                            );
+                        }
+                        
+                        if (elem.opacity !== undefined) {
+                            textNode.opacity = elem.opacity;
+                        }
+                        
                         recreatedCount++;
+                        
+                    } else if (elem.type === 'Path' && elem.path) {
+                        try {
+                            const pathNode = editor.createPath(elem.path);
+                            
+                            pathNode.translation = { x: elem.x || 0, y: elem.y || 0 };
+                            
+                            if (elem.fill) {
+                                pathNode.fill = editor.makeColorFill(elem.fill);
+                            }
+                            
+                            if (elem.stroke) {
+                                pathNode.stroke = editor.makeStroke({ 
+                                    color: elem.stroke, 
+                                    width: elem.stroke.width 
+                                });
+                            }
+                            
+                            if (elem.fillRule !== undefined) {
+                                pathNode.fillRule = elem.fillRule;
+                            }
+                            
+                            if (elem.opacity !== undefined) {
+                                pathNode.opacity = elem.opacity;
+                            }
+                            
+                            artboard.children.append(pathNode);
+                            recreatedCount++;
+                        } catch (e) {
+                            console.log("Could not recreate path:", e);
+                        }
+                        
                     } else {
-                        // Skip unsupported types - don't create placeholders
                         console.log("Skipping unsupported element type:", elem.type);
                     }
                 } catch (e) {
                     console.log("Could not recreate element:", elem.type, e);
                 }
             }
+            
+            console.log(`Recreated ${recreatedCount}/${elements.length} elements`);
             
             return { success: true, recreatedCount, total: elements.length };
         }
